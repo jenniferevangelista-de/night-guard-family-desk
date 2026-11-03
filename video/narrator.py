@@ -4,6 +4,7 @@ Copied from the Night Guard video pipeline (same author) so this repository can 
 Fonts are read from FONTS (Windows fonts are not redistributed here).
 """
 import math
+import random
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -121,3 +122,35 @@ def sloth(img, t, cx, by, h=420, m=0.0, mood="talk", wave=0.0):
     w2, h2 = int(w_ / ss), int(h_ / ss)
     lay = lay.resize((w2, h2), Image.LANCZOS)
     img.paste(lay, (int(cx - w2 / 2), int(by - h2 * 424 / 440)), lay)
+
+
+def jit(p, t, seed, a=1.6):
+    r = random.Random(hash((dr(t), seed, round(p[0]), round(p[1]))) & 0xFFFFFFFF)
+    return (p[0] + r.uniform(-a, a), p[1] + r.uniform(-a, a))
+
+
+def wline(d, pts, t, seed=0, w=7, col=INK, a=1.6):
+    """Wobbly ink line through pts, re-jittered every drawing."""
+    out = []
+    for i in range(len(pts) - 1):
+        (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+        n = max(2, int(math.hypot(x1 - x0, y1 - y0) / 28))
+        for j in range(n):
+            k = j / n
+            out.append(jit((x0 + (x1 - x0) * k, y0 + (y1 - y0) * k), t, seed + i * 31 + j, a))
+    out.append(jit(pts[-1], t, seed + 999, a))
+    d.line(out, fill=col, width=w, joint="curve")
+
+
+def shield(d, t, cx, cy, s=1.0, seed=500):
+    """The Night Guard logo: a shield with a moon and two eyes."""
+    pts = [(cx, cy - 170 * s), (cx + 140 * s, cy - 120 * s), (cx + 130 * s, cy + 30 * s), (cx, cy + 170 * s),
+           (cx - 130 * s, cy + 30 * s), (cx - 140 * s, cy - 120 * s), (cx, cy - 170 * s)]
+    d.polygon([jit(p, t, seed + i, 2) for i, p in enumerate(pts[:-1])], fill=NAVY)
+    mx, my = cx - 30 * s, cy - 40 * s
+    d.ellipse((mx - 50 * s, my - 50 * s, mx + 50 * s, my + 50 * s), fill=GOLD)
+    d.ellipse((mx - 20 * s, my - 65 * s, mx + 70 * s, my + 30 * s), fill=NAVY)
+    ey = cy + 40 * s
+    for ex in (cx - 40 * s, cx + 40 * s):
+        d.ellipse((ex - 12 * s, ey - 12 * s, ex + 12 * s, ey + 12 * s), fill=(255, 255, 255))
+    wline(d, pts, t, seed, int(9 * s) or 4)

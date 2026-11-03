@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from narrator import INK, H, W, font, paper, sloth, text  # noqa: E402
+from narrator import INK, H, W, font, paper, shield, sloth, text  # noqa: E402
 
 SR, FPS = 48000, 24
 OUT = Path("video/out")
@@ -38,6 +38,8 @@ SPEED = 1.2  # the Night Guard film was rendered 20% faster than its timeline
 
 # ------------------------------------------------------------------ narration
 
+OUTRO = "Night Guard Family Desk. A partner for parents, a friend for kids, and now a plan for every alert."
+
 BRIDGE = ("But an alert is only the beginning. It's late, a parent reads it, and thinks: now what? "
           "Do I talk to her? Do I keep the chat? Where do I report it? "
           "That's why there's Family Desk. The agent proposes. The parent decides. And both work on the same case.")
@@ -50,7 +52,7 @@ TOUR = [
     ("alert", "The alert", "Now a real-looking alert. Lia, eleven, on Roblox. Possible grooming. The parent sees the risk, "
                            "the app and one flagged phrase. Nothing more."),
     ("ask", "Ask for a plan", "One click asks the agent for a plan. The agent is Gemma 4, a small open model, running on a "
-                              "plain four core CPU. No paid API. Zero dollars."),
+                              "plain four core CPU. No paid API, nothing to pay."),
     ("work", "Agent at work", "This part is sped up. The agent reads the case through the same typed actions the screen "
                               "uses, gets advice for this exact risk, and writes each step into the shared case."),
     ("plan", "The plan", "Here's the plan. A calm talk with no blame. Keep the evidence. Block the stranger. Report it. "
@@ -65,7 +67,7 @@ TOUR = [
     ("log", "Case log", "Everything is in the case log, labeled parent, agent or Night Guard. So anyone can see who did what."),
     ("close", "Close the case", "When every step is reviewed, the parent closes the case with a short note. If the agent "
                                 "asks to close it, the parent has to approve that too."),
-    ("end", "Family Desk", "Built on Agent-Native, with an open model, at zero cost. The family sees the risk, never the "
+    ("end", "Family Desk", "Built on Agent-Native, with an open model, at no cost. The family sees the risk, never the "
                            "whole chat. And now they know what to do next."),
 ]
 # where each part starts in family_desk_tour.mp4 (the first narration cue of each part)
@@ -193,7 +195,7 @@ async def make_voices():
     import edge_tts
     vdir = WORK / "voz"
     vdir.mkdir(parents=True, exist_ok=True)
-    lines = [("bridge", BRIDGE)] + [(sid, line) for sid, _, line in TOUR]
+    lines = [("bridge", BRIDGE), ("outro", OUTRO)] + [(sid, line) for sid, _, line in TOUR]
     meta = {}
     for sid, line in lines:
         f = vdir / f"{sid}.mp3"
@@ -265,7 +267,7 @@ def encode(frames_fn, n_frames, wav: Path, dst: Path, bg_video: Path | None = No
         inputs = ["-i", str(bg_video), "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
                   "-i", str(wav)]
         filt = ["-filter_complex", f"[0:v]fps={FPS},scale={fw}:{fh},pad={W}:{H}:{fx}:{fy}:color=#f7f2e6[bg];"
-                                   f"[bg][1:v]overlay=0:0:shortest=1[v]", "-map", "[v]", "-map", "2:a"]
+                                   f"[bg][1:v]overlay=0:0:shortest=1,setsar=1[v]", "-map", "[v]", "-map", "2:a"]
     else:
         inputs = ["-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-i", str(wav)]
         filt = ["-map", "0:v", "-map", "1:a"]
@@ -441,7 +443,7 @@ def build_tour() -> Path:
             "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p", p)
         pieces.append(p)
         span = duration(p)
-        hold = max(0.0, need - span) + (1.5 if sid == "end" else 0.0)
+        hold = max(0.0, need - span)
         if hold > 0.05:
             still = WORK / f"still_{k:02d}.png"
             run("ffmpeg", "-v", "error", "-y", "-sseof", "-0.1", "-i", p, "-frames:v", "1", "-update", "1", still)
@@ -496,21 +498,66 @@ def build_tour() -> Path:
     return dst
 
 
+# ------------------------------------------------------------------ 4. end card
+
+def build_outro() -> Path:
+    v = voices()["outro"]
+    path, vd = v["voice"], v["dur"]
+    lead = 0.5
+    dur = lead + vd + 3.5
+    vend = lead + vd
+
+    def frame(t):
+        im = paper().copy().convert("RGBA")
+        d = ImageDraw.Draw(im)
+        shield(d, t, W / 2, 250, 0.8)
+        z = min(1.0, t / 0.5)
+        z = 1 - (1 - z) ** 3
+        text(d, "Night Guard Family Desk", W / 2, 500, int(50 + 60 * z), NIGHT, "mm", "impact.ttf")
+        if t > lead + 1.0:
+            text(d, "a partner for parents · a friend for kids · a plan for every alert", W / 2, 610, 46, INK)
+        if t > lead + 2.4:
+            text(d, "github.com/jenniferevangelista-de/night-guard-family-desk", W / 2 - 60, 710, 40, (214, 52, 52))
+        if t > lead + 3.0:
+            text(d, "Jennifer Evangelista · Agent-Native · Gemma · Night Guard", W / 2, 800, 34, SOFT)
+        text(d, 'Music: "Funkorama" Kevin MacLeod (incompetech.com), CC BY 4.0 · opening score: original', W / 2, 1050, 22, SOFT)
+        m = mouth(path, t - lead)
+        mood = "talk" if m is not None else ("listen" if t < lead else ("yawn" if t < vend + 1.0 else "sleep"))
+        sloth(im, t, 1720, 990, 340, m or 0.0, mood)
+        return im
+
+    n = int(dur * SR)
+    vo = np.zeros(n)
+    a = pcm(path)
+    add(vo, lead, a / (np.abs(a).max() + 1e-9) * .9)
+    fx = np.zeros(n)
+    add(fx, lead, chime(880), .9)
+    add(fx, lead + .15, chime(1320), .9)
+    fade = np.ones(n)
+    fade[int((dur - 2.5) * SR):] = np.linspace(1, 0, n - int((dur - 2.5) * SR))
+    wav = WORK / "outro.wav"
+    write_wav(mixdown(vo + fx * .7 + funk(n) * .22 * duck(vo, .65) * fade), wav)
+    dst = WORK / "part4_outro.mp4"
+    encode(frame, int(dur * FPS), wav, dst)
+    return dst
+
+
 # ------------------------------------------------------------------ join
 
 def join(parts, dst: Path) -> Path:
-    ins, filt = [], ""
+    ins, pre, filt = [], "", ""
     for k, p in enumerate(parts):
         ins += ["-i", str(p)]
-        filt += f"[{k}:v][{k}:a]"
-    run("ffmpeg", "-v", "error", "-y", *ins, "-filter_complex", f"{filt}concat=n={len(parts)}:v=1:a=1[v][a]",
+        pre += f"[{k}:v]setsar=1[v{k}];"
+        filt += f"[v{k}][{k}:a]"
+    run("ffmpeg", "-v", "error", "-y", *ins, "-filter_complex", f"{pre}{filt}concat=n={len(parts)}:v=1:a=1[v][a]",
         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "19", "-preset", "medium", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), dst)
     return dst
 
 
 def build():
-    parts = [build_context(), build_bridge(), build_tour()]
+    parts = [build_context(), build_bridge(), build_tour(), build_outro()]
     joined = join(parts, WORK / "joined.mp4")
     dst = OUT / "family_desk_demo.mp4"
     run("ffmpeg", "-v", "error", "-y", "-i", joined, "-c:v", "copy", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
@@ -529,5 +576,7 @@ if __name__ == "__main__":
         build_bridge()
     elif what == "tour":
         build_tour()
+    elif what == "outro":
+        build_outro()
     else:
         build()
