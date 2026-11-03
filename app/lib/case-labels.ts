@@ -32,28 +32,30 @@ export const STEP_KIND = {
 } as const;
 
 export const STEP_STATUS = {
-    proposed: {
-      label: "Waiting for you",
-      className:
-        "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/30",
-    },
-    approved: {
-      label: "Approved",
-      className:
-        "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/30",
-    },
-    done: {
-      label: "Done",
-      className: "bg-muted text-muted-foreground border-border",
-    },
-    skipped: {
-      label: "Skipped",
-      className: "bg-muted text-muted-foreground border-border line-through",
-    },
-  } as const;
+  proposed: {
+    label: "Waiting for you",
+    className:
+      "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/30",
+  },
+  approved: {
+    label: "Approved",
+    className:
+      "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/30",
+  },
+  done: {
+    label: "Done",
+    className: "bg-muted text-muted-foreground border-border",
+  },
+  skipped: {
+    label: "Skipped",
+    className: "bg-muted text-muted-foreground border-border line-through",
+  },
+} as const;
 
 export function stepStatus(status: string) {
-  return STEP_STATUS[status as keyof typeof STEP_STATUS] ?? STEP_STATUS.proposed;
+  return (
+    STEP_STATUS[status as keyof typeof STEP_STATUS] ?? STEP_STATUS.proposed
+  );
 }
 
 export const DRAFT_LABEL: Record<string, string> = {
@@ -101,7 +103,8 @@ export const DEMO_ALERTS = [
       app: "Roblox",
       riskType: "scam",
       severity: "low",
-      flaggedPhrase: "give me your password and I'll send you 10,000 free Robux",
+      flaggedPhrase:
+        "give me your password and I'll send you 10,000 free Robux",
     },
   },
 ] as const;

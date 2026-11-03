@@ -1,8 +1,9 @@
 import { defineAction, fail } from "@agent-native/core/action";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb, schema } from "../server/db/index.js";
+import { firstUnreviewed } from "../server/lib/case-rules.js";
 import {
   actorFor,
   assertOpen,
@@ -25,17 +26,22 @@ export default defineAction({
   outputSchema: z.object({ id: z.string(), status: z.string() }),
   // The agent can suggest closing, but a person always confirms it.
   needsApproval: (_args, ctx) => ctx?.caller === "tool",
-  mcpAnnotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  mcpAnnotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
   run: async ({ caseId, closingNote }, ctx) => {
     const email = requireEmail(ctx);
     const c = await loadCase(caseId);
     assertOpen(c.status);
     const s = schema.caseSteps;
-    const [waiting] = await getDb()
-      .select({ id: s.id, title: s.title })
+    const steps = await getDb()
+      .select({ title: s.title, status: s.status })
       .from(s)
-      .where(and(eq(s.caseId, caseId), eq(s.status, "proposed")))
-      .limit(1);
+      .where(eq(s.caseId, caseId))
+      .limit(50);
+    const waiting = firstUnreviewed(steps);
     if (waiting)
       fail(`Review every step first. Still waiting: "${waiting.title}".`, {
         errorCode: "unreviewed_steps",
@@ -45,7 +51,13 @@ export default defineAction({
       .update(schema.cases)
       .set({ status: "closed", closingNote })
       .where(eq(schema.cases.id, caseId));
-    await logEvent(caseId, c.orgId, email, actorFor(ctx), `Case closed: ${closingNote}`);
+    await logEvent(
+      caseId,
+      c.orgId,
+      email,
+      actorFor(ctx),
+      `Case closed: ${closingNote}`,
+    );
     return { id: caseId, status: "closed" };
   },
 });

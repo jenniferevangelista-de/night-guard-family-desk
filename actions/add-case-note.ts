@@ -16,7 +16,11 @@ export default defineAction({
     note: z.string().min(1).max(500).describe("The note, one or two sentences"),
   }),
   outputSchema: z.object({ caseId: z.string() }),
-  mcpAnnotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  mcpAnnotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   run: async ({ caseId, note }, ctx) => {
     const email = requireEmail(ctx);
     const c = await loadCase(caseId);

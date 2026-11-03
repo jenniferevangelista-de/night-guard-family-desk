@@ -4,11 +4,12 @@ import { asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb, schema } from "../server/db/index.js";
+import { guidanceFor } from "../server/lib/case-rules.js";
 import { loadCase } from "../server/lib/cases.js";
 
 export default defineAction({
   description:
-    "Read one case: the Night Guard alert (risk type, app and the one flagged phrase; the full chat is never available), the plan steps with their review status, the drafts and the case log.",
+    "Read one case: the Night Guard alert (risk type, app and the one flagged phrase; the full chat is never available), guidance for this risk type (which step kinds to propose and where to report), the plan steps with their review status, the drafts and the case log.",
   schema: z.object({ caseId: z.string().describe("Case id from list-cases") }),
   outputSchema: z.object({
     case: z.object({
@@ -44,6 +45,11 @@ export default defineAction({
         updatedAt: z.string(),
       }),
     ),
+    guidance: z.object({
+      stepKinds: z.array(z.string()),
+      reportTo: z.array(z.string()),
+      notes: z.string(),
+    }),
     events: z.array(
       z.object({
         id: z.string(),
@@ -82,7 +88,8 @@ export default defineAction({
       .from(cases)
       .where(eq(cases.id, caseId))
       .limit(1);
-    if (!c) fail("Case not found.", { errorCode: "not_found", statusCode: 404 });
+    if (!c)
+      fail("Case not found.", { errorCode: "not_found", statusCode: 404 });
     const steps = await db
       .select({
         id: caseSteps.id,
@@ -121,6 +128,12 @@ export default defineAction({
       .where(eq(caseEvents.caseId, caseId))
       .orderBy(desc(caseEvents.createdAt))
       .limit(100);
-    return { case: c, steps, drafts, events };
+    return {
+      case: c,
+      guidance: guidanceFor(c.riskType),
+      steps,
+      drafts,
+      events,
+    };
   },
 });

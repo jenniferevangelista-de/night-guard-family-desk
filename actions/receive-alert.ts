@@ -3,21 +3,10 @@ import { buildDeepLink } from "@agent-native/core/server";
 import { z } from "zod";
 
 import { getDb, schema } from "../server/db/index.js";
+import { checkAlertPrivacy } from "../server/lib/case-rules.js";
 import { logEvent, requireEmail, RISK_TYPES } from "../server/lib/cases.js";
 
 const errors = defineActionErrors("privacy_violation");
-
-// The only fields Night Guard is allowed to send. Anything else (a transcript,
-// screenshots, the other person's messages) is refused, so the family desk can
-// never become a copy of the child's private chat.
-const ALLOWED = new Set([
-  "childAlias",
-  "app",
-  "riskType",
-  "severity",
-  "flaggedPhrase",
-  "detectedAt",
-]);
 
 export default defineAction({
   description:
@@ -35,21 +24,31 @@ export default defineAction({
         .max(40)
         .describe("App where the risk happened, e.g. Roblox or Discord"),
       riskType: z.enum(RISK_TYPES).describe("Risk category from Night Guard"),
-      severity: z.enum(["low", "medium", "high"]).describe("Night Guard severity"),
+      severity: z
+        .enum(["low", "medium", "high"])
+        .describe("Night Guard severity"),
       flaggedPhrase: z
         .string()
         .min(1)
-        .describe("The single flagged phrase, at most 240 characters, one line"),
+        .describe(
+          "The single flagged phrase, at most 240 characters, one line",
+        ),
       detectedAt: z
         .string()
         .datetime({ offset: true })
         .optional()
-        .describe("When Night Guard flagged it, ISO 8601 with offset; defaults to now"),
+        .describe(
+          "When Night Guard flagged it, ISO 8601 with offset; defaults to now",
+        ),
     })
     .passthrough(),
   outputSchema: z.object({ id: z.string(), childAlias: z.string() }),
   errors,
-  mcpAnnotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  mcpAnnotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   link: ({ result }) => ({
     url: buildDeepLink({
       view: "cases",
@@ -60,20 +59,13 @@ export default defineAction({
   }),
   run: async (args, ctx) => {
     const ownerEmail = requireEmail(ctx);
-    const extra = Object.keys(args).filter((k) => !ALLOWED.has(k));
-    if (extra.length)
-      errors.noWrite(
-        `Refused: Night Guard may only share risk type, app and the flagged phrase. Extra fields: ${extra.join(", ")}.`,
-        "privacy_violation",
-        { statusCode: 422 },
-      );
-    const phrase = args.flaggedPhrase.trim();
-    if (phrase.length > 240 || /\r|\n/.test(phrase))
-      errors.noWrite(
-        "Refused: the flagged phrase must be one line of at most 240 characters, never a chat transcript.",
-        "privacy_violation",
-        { statusCode: 422 },
-      );
+    const privacy = checkAlertPrivacy(args);
+    if (!privacy.ok) {
+      return errors.noWrite(privacy.reason, "privacy_violation", {
+        statusCode: 422,
+      });
+    }
+    const phrase = privacy.phrase;
     const orgId = ctx?.orgId ?? null;
     const row = {
       id: crypto.randomUUID(),

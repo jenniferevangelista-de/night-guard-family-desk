@@ -1,9 +1,9 @@
-import { sql } from "drizzle-orm";
-import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import {
   createSharesTable,
   ownableColumns,
 } from "@agent-native/core/db/schema";
+import { sql } from "drizzle-orm";
+import { integer, pgTable, text } from "drizzle-orm/pg-core";
 
 // One case per Night Guard alert. Night Guard only ever sends the risk type,
 // the app and the single flagged phrase; the full chat never leaves the

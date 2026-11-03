@@ -78,7 +78,9 @@ export default function CasesIndex() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() =>
-                receive.mutate(LEAKY_ALERT as Parameters<typeof receive.mutate>[0])
+                receive.mutate(
+                  LEAKY_ALERT as Parameters<typeof receive.mutate>[0],
+                )
               }
             >
               Test: send the full chat (must be refused)

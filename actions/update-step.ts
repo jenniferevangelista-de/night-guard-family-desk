@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb, schema } from "../server/db/index.js";
+import { statusAfterEdit } from "../server/lib/case-rules.js";
 import {
   actorFor,
   assertOpen,
@@ -26,13 +27,19 @@ export default defineAction({
     status: z.string(),
     needsReapproval: z.boolean(),
   }),
-  mcpAnnotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  mcpAnnotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
   run: async ({ caseId, stepId, title, detail }, ctx) => {
     const email = requireEmail(ctx);
     const c = await loadCase(caseId);
     assertOpen(c.status);
     if (!title && !detail)
-      fail("Nothing to change: pass title or detail.", { errorCode: "empty_patch" });
+      fail("Nothing to change: pass title or detail.", {
+        errorCode: "empty_patch",
+      });
     const actor = actorFor(ctx);
     const s = schema.caseSteps;
     const [step] = await getDb()
@@ -40,14 +47,15 @@ export default defineAction({
       .from(s)
       .where(and(eq(s.id, stepId), eq(s.caseId, caseId)))
       .limit(1);
-    if (!step) fail("Step not found.", { errorCode: "not_found", statusCode: 404 });
+    if (!step)
+      fail("Step not found.", { errorCode: "not_found", statusCode: 404 });
     if (step.status === "done")
       fail("This step is already done; add a follow-up step instead.", {
         errorCode: "step_done",
         statusCode: 409,
       });
-    const needsReapproval = actor === "agent" && step.status === "approved";
-    const status = needsReapproval ? "proposed" : step.status;
+    const status = statusAfterEdit(actor, step.status);
+    const needsReapproval = status !== step.status;
     await getDb()
       .update(s)
       .set({

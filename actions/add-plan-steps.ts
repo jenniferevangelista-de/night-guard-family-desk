@@ -38,7 +38,11 @@ export default defineAction({
     caseId: z.string(),
     added: z.array(z.object({ id: z.string(), title: z.string() })),
   }),
-  mcpAnnotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  mcpAnnotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
   run: async ({ caseId, steps }, ctx) => {
     const email = requireEmail(ctx);
     const c = await loadCase(caseId);

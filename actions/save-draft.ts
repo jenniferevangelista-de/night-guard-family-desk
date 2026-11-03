@@ -30,8 +30,16 @@ export default defineAction({
       .max(6000)
       .describe("Full draft text in plain language; markdown lists allowed"),
   }),
-  outputSchema: z.object({ id: z.string(), kind: z.string(), status: z.string() }),
-  mcpAnnotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  outputSchema: z.object({
+    id: z.string(),
+    kind: z.string(),
+    status: z.string(),
+  }),
+  mcpAnnotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
   run: async ({ caseId, kind, body }, ctx) => {
     const email = requireEmail(ctx);
     const c = await loadCase(caseId);

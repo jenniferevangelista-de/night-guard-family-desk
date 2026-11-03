@@ -31,8 +31,15 @@ export default defineAction({
       .set({ status: "approved", updatedAt: nowIso() })
       .where(and(eq(d.caseId, caseId), eq(d.kind, kind)))
       .returning({ id: d.id });
-    if (!row) fail("Draft not found.", { errorCode: "not_found", statusCode: 404 });
-    await logEvent(caseId, c.orgId, email, "parent", `Parent approved the ${kind.replace("_", " ")}.`);
+    if (!row)
+      fail("Draft not found.", { errorCode: "not_found", statusCode: 404 });
+    await logEvent(
+      caseId,
+      c.orgId,
+      email,
+      "parent",
+      `Parent approved the ${kind.replace("_", " ")}.`,
+    );
     return { kind, status: "approved" };
   },
 });

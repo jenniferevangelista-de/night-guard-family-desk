@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb, schema } from "../server/db/index.js";
+import { nextStepStatus } from "../server/lib/case-rules.js";
 import {
   assertOpen,
   loadCase,
@@ -11,21 +12,15 @@ import {
   requireEmail,
 } from "../server/lib/cases.js";
 
-// Allowed transitions. The parent decides; the agent cannot call this action.
-const NEXT: Record<string, Record<string, string>> = {
-  approve: { proposed: "approved", skipped: "approved" },
-  skip: { proposed: "skipped", approved: "skipped" },
-  done: { approved: "done" },
-  reopen: { done: "approved", skipped: "proposed", approved: "proposed" },
-};
-
 export default defineAction({
   description:
     "Parent's decision on a plan step: approve, skip, mark done, or reopen. Only the signed-in parent can run this from the case screen; it is not available to the agent.",
   schema: z.object({
     caseId: z.string().describe("Case id"),
     stepId: z.string().describe("Step id"),
-    decision: z.enum(["approve", "skip", "done", "reopen"]).describe("Decision"),
+    decision: z
+      .enum(["approve", "skip", "done", "reopen"])
+      .describe("Decision"),
   }),
   outputSchema: z.object({ id: z.string(), status: z.string() }),
   uiOnly: true,
@@ -39,8 +34,9 @@ export default defineAction({
       .from(s)
       .where(and(eq(s.id, stepId), eq(s.caseId, caseId)))
       .limit(1);
-    if (!step) fail("Step not found.", { errorCode: "not_found", statusCode: 404 });
-    const next = NEXT[decision]?.[step.status];
+    if (!step)
+      fail("Step not found.", { errorCode: "not_found", statusCode: 404 });
+    const next = nextStepStatus(decision, step.status);
     if (!next)
       fail(
         decision === "done"
@@ -50,10 +46,21 @@ export default defineAction({
       );
     await getDb()
       .update(s)
-      .set({ status: next as "proposed" | "approved" | "done" | "skipped", updatedAt: nowIso() })
+      .set({ status: next, updatedAt: nowIso() })
       .where(eq(s.id, stepId));
-    const verb = { approve: "approved", skip: "skipped", done: "marked done", reopen: "reopened" }[decision];
-    await logEvent(caseId, c.orgId, email, "parent", `Parent ${verb} "${step.title}".`);
+    const verb = {
+      approve: "approved",
+      skip: "skipped",
+      done: "marked done",
+      reopen: "reopened",
+    }[decision];
+    await logEvent(
+      caseId,
+      c.orgId,
+      email,
+      "parent",
+      `Parent ${verb} "${step.title}".`,
+    );
     return { id: stepId, status: next };
   },
 });

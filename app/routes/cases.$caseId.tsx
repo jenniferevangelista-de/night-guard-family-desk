@@ -230,6 +230,7 @@ export default function CaseDesk() {
               </span>
             ) : null}
           </h2>
+          <Guidance guidance={data.guidance} />
           {data.steps.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
               No plan yet. Ask the agent, or add your own step below.
@@ -282,6 +283,41 @@ export default function CaseDesk() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function Guidance({
+  guidance,
+}: {
+  guidance: { stepKinds: string[]; reportTo: string[]; notes: string };
+}) {
+  return (
+    <details className="group rounded-xl border border-indigo-400/25 bg-indigo-500/5 px-4 py-3 text-sm">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 text-muted-foreground">
+        <span className="mr-1 font-medium text-foreground">
+          A good plan here covers
+        </span>
+        {guidance.stepKinds.map((kind) => {
+          const k = STEP_KIND[kind as keyof typeof STEP_KIND];
+          return k ? (
+            <span
+              key={kind}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-xs"
+            >
+              <k.Icon className="size-3.5 text-indigo-500" />
+              {k.label}
+            </span>
+          ) : null;
+        })}
+        <span className="ml-auto text-xs group-open:hidden">Why?</span>
+      </summary>
+      <p className="mt-3 text-muted-foreground">{guidance.notes}</p>
+      <ul className="mt-2 list-disc space-y-0.5 pl-5 text-muted-foreground">
+        {guidance.reportTo.map((r) => (
+          <li key={r}>{r}</li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

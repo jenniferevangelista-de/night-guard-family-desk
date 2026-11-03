@@ -25,12 +25,15 @@ Both sides call the same typed actions in `actions/`, so the rules hold no matte
 - **The agent proposes, the parent decides.** Steps and drafts start as "waiting for you". If the agent edits a step the parent already approved, it goes back to waiting.
 - **No loose ends.** A case cannot close while any step is still waiting for review.
 - **One record.** Every action writes to the case log, labeled parent, agent or Night Guard.
+- **Guidance from the data.** `get-case` returns, for the case's risk type, the step kinds a good plan covers and the official channels to report to. Even a small local model follows it, and the parent can see why each step is there.
+
+The rules live in one pure module, `server/lib/case-rules.ts`, which the actions call and the unit tests cover.
 
 The agent follows a playbook skill (`.agents/skills/family-safety-playbook/SKILL.md`): calm talk without punishment, keep evidence before blocking, never contact the other person, report grooming to SaferNet Brasil or the NCMEC CyberTipline, call the police in immediate danger, and suggest professional support (CVV 188 in Brazil, 988 in the US) for self-harm signals. It is guidance for parents, not legal or clinical advice.
 
 ## Model and cost
 
-The agent runs on **Gemma 4 E2B through Ollama**, on CPU, inside the dev environment. No paid API, no key. This matches Night Guard, which also runs Gemma locally. Any provider Agent-Native supports can be used instead by changing `AGENT_ENGINE` and `AGENT_MODEL`.
+The agent runs on **Gemma 4 E2B through Ollama**, on CPU, inside the dev environment. No paid API, no key. This matches Night Guard, which also runs Gemma locally. On 4 CPU cores a plan takes a few minutes; the prompt is kept lean (`leanPrompt`, `frameworkTools: "minimal"`) and a tiny proxy turns off the model's thinking mode, which made it about 5 times faster. Any provider Agent-Native supports can be used instead by changing `AGENT_ENGINE` and `AGENT_MODEL`.
 
 ## Run it
 
@@ -39,11 +42,12 @@ Requires Node 22.22+, pnpm and [Ollama](https://ollama.com).
 ```bash
 ollama pull gemma4:e2b
 OLLAMA_CONTEXT_LENGTH=16384 ollama serve   # the agent prompt needs more than the 2k default
+python3 scripts/ollama-no-think.py &       # turns off Gemma's thinking mode, about 5x faster on CPU
 
 pnpm install
 cat > .env <<EOF
 AGENT_ENGINE=ai-sdk:ollama
-OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_BASE_URL=http://127.0.0.1:11435
 AGENT_MODEL=gemma4:e2b
 EOF
 pnpm dev
@@ -53,9 +57,25 @@ Open `/cases`, use **Simulate an alert** to create a fictional case, then **Ask 
 
 For a shared demo machine (not production) you can add `AUTH_DISABLED=true` so every request runs as one local user.
 
+## Checks
+
+```bash
+pnpm test                 # unit tests for the case rules (privacy, transitions, re-approval, guidance)
+pnpm lint                 # oxlint + oxfmt on the app's own code
+pnpm typecheck            # after one `pnpm dev`, which generates the action types
+pnpm agent-native:doctor  # the framework's own guards (scoping, migrations, credentials)
+```
+
+CI (`.github/workflows/ci.yml`) runs lint, tests and doctor on every push.
+
+## Videos
+
+A narrated film and a real tour of the app, made by `video/make_videos.py`. How they were made, and the music credit, are in [docs/VIDEOS.md](docs/VIDEOS.md).
+
 ## Project map
 
 - `actions/`: `receive-alert`, `list-cases`, `get-case`, `add-plan-steps`, `update-step`, `review-step` (UI only), `save-draft`, `approve-draft` (UI only), `add-case-note`, `close-case`
+- `server/lib/case-rules.ts`, `tests/`: the rules as pure functions, and their tests
 - `server/db/schema.ts`, `server/plugins/db.ts`: cases, steps, drafts, case log (Postgres / PGlite)
 - `app/routes/cases._index.tsx`, `app/routes/cases.$caseId.tsx`: case list and case desk
 - `server/plugins/agent-chat.ts`, `AGENTS.md`, `.agents/skills/family-safety-playbook/`: agent prompt, rules and playbook
@@ -75,7 +95,8 @@ For a shared demo machine (not production) you can add `AUTH_DISABLED=true` so e
 - The case list and case desk screens (alert card, plan review, draft editor with approval, case log, close dialog).
 - The agent's system prompt, the `AGENTS.md` section and the family-safety playbook skill.
 - Sidebar link, navigation state (`caseId`) and home route changes in the template.
-- Local free-model setup (Gemma 4 E2B on Ollama) and this README.
+- Local free-model setup (Gemma 4 E2B on Ollama, the no-thinking proxy, the lean prompt) and the risk guidance in `get-case`.
+- Unit tests, lint setup, CI, the video script and these docs.
 
 ## License
 
