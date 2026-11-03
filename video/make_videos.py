@@ -119,22 +119,16 @@ SUB_STYLE = "FontName=Kalam,FontSize=13,PrimaryColour=&H00301824,OutlineColour=&
 
 # ------------------------------------------------------------------ the score and the effects
 
-RNG = np.random.default_rng(31)
-
-
 def _t(d):
     return np.arange(int(d * SR)) / SR
-
-
-def _lpf(x, k):
-    return np.convolve(x, np.ones(k) / k, mode="same")
 
 
 SFX = {
     "pop": lambda: (lambda t: np.sin(2 * np.pi * (700 + 900 * t) * t) * np.exp(-t * 28) * 0.5)(_t(.18)),
     "chime": lambda f0=1320: (lambda t: sum(np.sin(2 * np.pi * f0 * m * t) / m for m in (1, 2, 3)) * np.exp(-t * 5) * 0.25)(_t(.6)),
     "alert": lambda: (lambda t: (np.sin(2 * np.pi * 880 * t) * (t < .12) + np.sin(2 * np.pi * 660 * t) * ((t > .16) & (t < .3))) * 0.35)(_t(.34)),
-    "swish": lambda: (lambda t: _lpf(RNG.normal(0, 1, len(t)), 2) * np.sin(np.pi * t / .3) ** 2 * 0.3)(_t(.3)),
+    # tonal swoosh: a soft sine glide, no noise (no hiss in any video)
+    "swoosh": lambda: (lambda t: np.sin(2 * np.pi * (320 * t + 1400 * t ** 2)) * np.sin(np.pi * t / .28) ** 2 * 0.22)(_t(.28)),
 }
 
 
@@ -437,7 +431,7 @@ def make_film():
         elif kind == "three":
             events += [(st + .4, "alert", .8)]
         elif kind in ("shot", "cards"):
-            events += [(st + .2, "swish", .7)]
+            events += [(st + .2, "swoosh", .7)]
         if kind == "shot" and switch is None:
             switch = st
     finish("family_desk_film", clips, np.concatenate(voice_track), cues, switch, events)

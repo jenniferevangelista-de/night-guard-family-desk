@@ -77,7 +77,7 @@ CI (`.github/workflows/ci.yml`) runs lint, tests and doctor on every push.
 
 ## Videos
 
-A narrated film and a real tour of the app, made by `video/make_videos.py`. How they were made, and the music credit, are in [docs/VIDEOS.md](docs/VIDEOS.md).
+One demo, narrated in the style of the Night Guard videos: the context (why an alert is not enough), then a real tour of the app. It is the hackathon demo on Clips, made by `video/make_videos.py` (recording) and `video/make_demo.py` (story, narration, frame). How it was made, and the music credit, are in [docs/VIDEOS.md](docs/VIDEOS.md).
 
 ## Project map
 
@@ -93,6 +93,7 @@ A narrated film and a real tour of the app, made by `video/make_videos.py`. How 
 
 - **Night Guard** ([repo](https://github.com/jenniferevangelista-de/night-guard)), my child-safety detector, submitted to the DEV Hacktoberfest challenge on Oct 24, 2026. Family Desk reuses its idea and its privacy rule (the family sees the risk, never the whole chat). **No Night Guard code is copied into this repo.** The alert shape (risk type, app, flagged phrase) mirrors what Night Guard shares.
 - **Agent-Native Chat template** (`@agent-native/core` 0.223, MIT): the scaffold from `npx @agent-native/core create --template chat`, which provides the app shell, sign-in, agent chat sidebar, action runtime, sharing helpers, i18n files, framework skills under `.agents/skills/` (except the playbook) and UI components.
+- **Night Guard videos:** the demo opens with about 90 seconds of the Night Guard film (picture and narration, sound remixed) and uses the Night Guard narrator character; `video/narrator.py` is the Night Guard drawing code for it.
 - **Libraries:** React, React Router, Drizzle ORM, Zod, Tailwind, Tabler Icons, shadcn-style components via `@agent-native/toolkit`, Ollama and the Gemma 4 E2B open model.
 
 **Built during the hackathon (Nov 3 to Nov 9, 2026):**
