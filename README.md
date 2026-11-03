@@ -8,6 +8,13 @@ That leaves parents with a hard question at a bad moment: *now what?* Family Des
 
 Built with [Agent-Native](https://www.agent-native.com) for the Builder.io Agent-Native Hackathon (Oct 27 to Nov 9, 2026). All data in this repo and in the demo is fictional.
 
+![The case desk: the alert, the agent's plan waiting for the parent, drafts and the case log](docs/screens/desk-plan.png)
+
+| | |
+|-|-|
+| ![Steps approved and done by the parent](docs/screens/desk-approved.png) | ![The talk script drafted by the agent, edited and approved](docs/screens/desk-drafts.png) |
+| ![A payload with the full chat is refused](docs/screens/privacy-refused.png) | ![The closed case with its note](docs/screens/desk-closed.png) |
+
 ## How people and the agent share the work
 
 | | Parent (UI) | Agent (chat) |

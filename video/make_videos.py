@@ -13,6 +13,7 @@ Music: an original bed made in code, then "Funkorama" by Kevin MacLeod
 """
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 import sys
@@ -65,7 +66,14 @@ def say(text: str, name: str) -> np.ndarray:
     p.parent.mkdir(parents=True, exist_ok=True)
     stamp = p.with_suffix(".txt")
     if not p.exists() or not stamp.exists() or stamp.read_text(encoding="utf-8") != text:
-        run("edge-tts", "--voice", VOICE, "--rate=+2%", "--text", text, "--write-media", str(p))
+        for attempt in range(5):  # the voice service sometimes drops a request
+            try:
+                run("edge-tts", "--voice", VOICE, "--rate=+2%", "--text", text, "--write-media", str(p))
+                break
+            except subprocess.CalledProcessError:
+                if attempt == 4:
+                    raise
+                time.sleep(3 * (attempt + 1))
         stamp.write_text(text, encoding="utf-8")
     return pcm(p)
 
@@ -213,8 +221,13 @@ def font(name: str, size: int, weight: int | None = None):
         try:
             f = ImageFont.truetype(str(p), size)
             if weight is not None:
-                try:
-                    f.set_variation_by_axes([weight] if name != "Fredoka.ttf" else [100, weight])
+                try:  # set each axis by its name: weight as asked, width and optical size at their defaults
+                    values = []
+                    for axis in f.get_variation_axes():
+                        tag = axis.get("name", b"")
+                        tag = tag.decode() if isinstance(tag, bytes) else str(tag)
+                        values.append(weight if tag.lower().startswith("weight") else axis["default"])
+                    f.set_variation_by_axes(values)
                 except Exception:  # noqa: BLE001
                     pass
             return f
@@ -293,7 +306,7 @@ def frame_title(line: str, sub: str) -> Image.Image:
     d.text((W // 2, 360), "Night Guard", font=title_font(96), fill=SOFT, anchor="mm")
     d.text((W // 2, 480), "Family Desk", font=title_font(170), fill=INK, anchor="mm")
     d.text((W // 2, 640), line, font=body_font(46, 500), fill=MOON, anchor="mm")
-    d.text((W // 2, 990), sub, font=body_font(28), fill=SOFT, anchor="mm")
+    d.text((W // 2, 760), sub, font=body_font(30), fill=SOFT, anchor="mm")
     return img.convert("RGB")
 
 
@@ -318,15 +331,16 @@ def frame_three(title: str, items: list[tuple[str, str]], foot: str) -> Image.Im
     for i, (head, body) in enumerate(items):
         x0 = 150 + i * 420
         d.rounded_rectangle([x0, 330, x0 + 380, 650], 28, fill=(43, 39, 104), outline=(110, 100, 210), width=3)
-        d.text((x0 + 190, 420), head, font=title_font(54), fill=TEAL, anchor="mm")
+        d.text((x0 + 190, 420), head, font=title_font(46), fill=TEAL, anchor="mm")
         y = 500
         for ln in wrap(body, body_font(30), 330):
             d.text((x0 + 190, y), ln, font=body_font(30), fill=INK, anchor="mm")
             y += 42
     x0 = 150 + 3 * 420
     d.rounded_rectangle([x0, 330, x0 + 380, 650], 28, fill=(40, 24, 40), outline=(220, 90, 110), width=3)
-    d.text((x0 + 190, 450), "The full chat", font=title_font(50), fill=(255, 150, 160), anchor="mm")
-    d.text((x0 + 190, 540), "stays on the child's computer", font=body_font(27), fill=(255, 200, 205), anchor="mm")
+    d.text((x0 + 190, 450), "The full chat", font=title_font(44), fill=(255, 150, 160), anchor="mm")
+    d.text((x0 + 190, 525), "stays on the", font=body_font(28), fill=(255, 200, 205), anchor="mm")
+    d.text((x0 + 190, 567), "child's computer", font=body_font(28), fill=(255, 200, 205), anchor="mm")
     d.line([x0 + 40, 360, x0 + 340, 620], fill=(230, 90, 110), width=7)
     d.text((W // 2, 800), foot, font=body_font(40, 500), fill=MOON, anchor="mm")
     return img.convert("RGB")
@@ -499,13 +513,35 @@ def make_tour():
     SHOTS.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        ctx = browser.new_context(viewport={"width": VW, "height": VH}, record_video_dir=str(rec),
-                                  record_video_size={"width": VW, "height": VH}, color_scheme="dark")
+        ctx = browser.new_context(viewport={"width": VW, "height": VH}, color_scheme="dark")
         ctx.add_init_script(CURSOR_JS)
         page = ctx.new_page()
         page.set_default_timeout(60000)
         page.goto(BASE + "/cases", wait_until="networkidle", timeout=600000)
+        page.wait_for_timeout(1500)
+        # Chrome's screencast stamps every frame with wall-clock time, so the cuts below
+        # line up with the narration even when a busy CPU slows the page down.
+        frames_dir = rec / "frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        frames: list[tuple[float, Path]] = []
+        cdp = ctx.new_cdp_session(page)
+
+        def on_frame(e):
+            f = frames_dir / f"{len(frames):06d}.jpg"
+            f.write_bytes(base64.b64decode(e["data"]))
+            frames.append((e["metadata"]["timestamp"], f))
+            try:
+                cdp.send("Page.screencastFrameAck", {"sessionId": e["sessionId"]})
+            except Exception:  # noqa: BLE001
+                pass
+
+        cdp.on("Page.screencastFrame", on_frame)
+        cdp.send("Page.startScreencast", {"format": "jpeg", "quality": 88, "maxWidth": VW, "maxHeight": VH})
+        page.mouse.move(800, 460)
+        page.wait_for_timeout(800)
         t0 = time.monotonic()
+        epoch0 = time.time()
+        offset = 0.0
         now = lambda: time.monotonic() - t0  # noqa: E731
 
         def glide(loc, click=False):
@@ -556,7 +592,8 @@ def make_tour():
         step("alert", lambda: (menu("possible grooming"), page.wait_for_url("**/cases/*"), page.wait_for_timeout(2000), shot("desk-alert")))
         step("ask", lambda: glide(page.get_by_role("button", name="Ask the agent for a plan"), True))
         marks.append((now(), "wait"))
-        wait_until(lambda: page.get_by_text("Waiting for you").count() >= 3 and not page.get_by_text("Thinking").count(), 1500)
+        idle = lambda: not page.title().startswith("Working")  # noqa: E731  the tab title says when the agent runs
+        wait_until(lambda: page.get_by_text("Waiting for you").count() >= 3 and idle(), 1500)
         page.wait_for_timeout(1500)
         shot("desk-plan")
         step("plan", lambda: (page.mouse.move(500, 500, steps=15), page.mouse.wheel(0, 250)), min_wait=6)
@@ -576,12 +613,16 @@ def make_tour():
         step("edit", edit, min_wait=8)
 
         def approve_rest():
-            for _ in range(8):
+            for _ in range(12):  # the list re-renders after each approval, so look the button up again
                 btn = page.locator("article").get_by_role("button", name="Approve")
                 if not btn.count():
                     break
-                glide(btn, True)
-                page.wait_for_timeout(900)
+                try:
+                    glide(btn, True)
+                except Exception:  # noqa: BLE001
+                    page.wait_for_timeout(500)
+                    continue
+                page.wait_for_timeout(1300)
             page.wait_for_timeout(500)
             glide(page.get_by_role("button", name="Mark done"), True)
             page.wait_for_timeout(1200)
@@ -592,7 +633,7 @@ def make_tour():
         page.wait_for_timeout(600)
         step("draft", lambda: glide(page.get_by_role("button", name="Draft the talk script"), True))
         marks.append((now(), "wait"))
-        wait_until(lambda: page.locator("[role=tabpanel] textarea").count() > 0 and not page.get_by_text("Thinking").count(), 1500)
+        wait_until(lambda: page.locator("[role=tabpanel] textarea").count() > 0 and idle(), 1500)
         page.wait_for_timeout(1500)
 
         def script():
@@ -629,18 +670,57 @@ def make_tour():
         step("close", close, min_wait=7)
         step("end", lambda: page.mouse.move(800, 300, steps=20), min_wait=5)
         page.wait_for_timeout(1500)
-        video = Path(page.video.path())
+        cdp.send("Page.stopScreencast")
+        end_epoch = time.time()
         ctx.close()
         browser.close()
+    video = frames_to_video(frames, epoch0, end_epoch, rec / "screencast.mp4")
 
-    (WORK / "tour_marks.json").write_text(json.dumps({"marks": marks, "waits": waits}), encoding="utf-8")
-    build_tour(video, lines, marks, waits)
+    (WORK / "tour_marks.json").write_text(json.dumps({"marks": marks, "waits": waits, "offset": offset, "video": str(video)}),
+                                          encoding="utf-8")
+    build_tour(video, lines, marks, waits, offset)
 
 
-def build_tour(video: Path, lines, marks, waits):
+def frames_to_video(frames: list[tuple[float, Path]], start: float, end: float, out: Path) -> Path:
+    """Hold each screencast frame until the next one arrives; time 0 is `start`."""
+    frames = sorted(frames)
+    lst = out.with_suffix(".txt")
+    rows, prev_t, prev_f = [], start, None
+    for ts, f in frames:
+        if ts < start:
+            prev_f = f
+            continue
+        if prev_f is not None:
+            rows.append(f"file '{prev_f.resolve().as_posix()}'\nduration {ts - prev_t:.4f}\n")
+        prev_t, prev_f = ts, f
+    if prev_f is not None:
+        rows.append(f"file '{prev_f.resolve().as_posix()}'\nduration {max(end - prev_t, .1):.4f}\n")
+        rows.append(f"file '{prev_f.resolve().as_posix()}'\n")
+    lst.write_text("".join(rows), encoding="utf-8")
+    run("ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-vf", f"scale={VW}:{VH}:force_original_aspect_ratio=decrease,pad={VW}:{VH}:(ow-iw)/2:(oh-ih)/2,fps={FPS}",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "16", "-preset", "veryfast", str(out))
+    return out
+
+
+def rebuild_tour():
+    """Rebuild the tour from the last recording, without driving the app again."""
+    data = json.loads((WORK / "tour_marks.json").read_text(encoding="utf-8"))
+    video = Path(data["video"]) if "video" in data else next((WORK / "rec").glob("*.webm"))
+    marks = [tuple(m) for m in data["marks"]]
+    lines = {k: (say(v, f"tour_{k}"), v) for k, v in TOUR.items()}
+    offset = data.get("offset")
+    if offset is None:  # older recordings: the last step lasts its narration, then 1.5 s, then the page closes
+        last = max(len(lines["end"][0]) / SR + .8, 5.0)
+        offset = duration(video) - (marks[-1][0] - .3 + last + 1.6)
+    build_tour(video, lines, marks, [tuple(w) for w in data["waits"]], offset)
+
+
+def build_tour(video: Path, lines, marks, waits, offset: float = 0.0):
     """Cut the recording into normal and sped-up parts, then place the narration on the new timeline."""
     total = duration(video)
-    parts, cursor = [], 0.0
+    marks = [(t + offset, k) for t, k in marks]
+    waits = [(a + offset, b + offset) for a, b in waits]
+    parts, cursor = [], max(0.0, marks[0][0] - 0.8)
     for a, b in waits:
         parts.append((cursor, a + 1.5, 1.0))
         wait_line = len(lines["wait"][0]) / SR + 1.2
@@ -651,6 +731,7 @@ def build_tour(video: Path, lines, marks, waits):
 
     def remap(t: float) -> float:
         out = 0.0
+        t = max(t, parts[0][0])
         for a, b, s in parts:
             if t <= a:
                 break
@@ -695,5 +776,7 @@ if __name__ == "__main__":
     which = sys.argv[3] if len(sys.argv) > 3 else "both"
     if which in ("tour", "both"):
         make_tour()
+    if which == "rebuild":
+        rebuild_tour()
     if which in ("film", "both"):
         make_film()

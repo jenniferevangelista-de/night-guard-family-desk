@@ -1,5 +1,7 @@
 -- Fictional demo data for the recording. No real child, chat or account.
 TRUNCATE case_events, case_drafts, case_steps, case_shares, cases;
+-- start the recording with an empty agent chat history
+TRUNCATE chat_thread_viewer_state, chat_thread_shares, chat_threads;
 \set org '''cc492695c44447b5b58bab3f63498cc8'''
 \set me '''dev@local.test'''
 
