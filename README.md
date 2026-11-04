@@ -77,6 +77,8 @@ CI (`.github/workflows/ci.yml`) runs lint, tests and doctor on every push.
 
 ## Videos
 
+**Watch:** [YouTube](https://youtu.be/Y6SCnPfd2vw) · [Clips (hackathon demo)](https://clips.agent-native.com/share/c4M7slfHfpgR) · [MP4 in the release](https://github.com/jenniferevangelista-de/night-guard-family-desk/releases/tag/v1.0-demo)
+
 One demo, narrated in the style of the Night Guard videos: the context (why an alert is not enough), then a real tour of the app. It is the hackathon demo on Clips, made by `video/make_videos.py` (recording) and `video/make_demo.py` (story, narration, frame). How it was made, and the music credit, are in [docs/VIDEOS.md](docs/VIDEOS.md).
 
 ## Project map
